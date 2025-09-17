@@ -43,6 +43,7 @@
 #include "cybsp.h"
 #include "cy_retarget_io.h"
 
+#include "cyhal_gpio.h"
 #include "mqtt_task.h"
 
 #include "FreeRTOS.h"
@@ -72,6 +73,7 @@
  ******************************************************************************/
 int main()
 {
+
     cy_rslt_t result;
 
 #if defined (CY_DEVICE_SECURE)
@@ -86,6 +88,13 @@ int main()
     
     result = cybsp_init();
     CY_ASSERT(CY_RSLT_SUCCESS == result);
+
+	/* Initialize IO */
+	/* Red User LED (LED4) */
+    result = cyhal_gpio_init(CYBSP_USER_LED, CYHAL_GPIO_DIR_OUTPUT, CYHAL_GPIO_DRIVE_STRONG, false);
+
+	/* User Button P0_4 */
+    result = cyhal_gpio_init(CYBSP_USER_BTN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
 
     /* To avoid compiler warnings. */
     (void) result;

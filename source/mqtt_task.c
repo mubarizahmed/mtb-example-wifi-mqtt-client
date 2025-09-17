@@ -44,11 +44,14 @@
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
 
+#include "cycfg_pins.h"
 #include "cyhal.h"
 #include "cybsp.h"
 
 /* FreeRTOS header files */
 #include "FreeRTOS.h"
+#include "cyhal_gpio_impl.h"
+#include "portmacro.h"
 #include "task.h"
 
 /* Task header files */
@@ -69,6 +72,7 @@
 
 /* LwIP header files */
 #include "lwip/netif.h"
+#include <stdint.h>
 
 /******************************************************************************
 * Macros
@@ -112,6 +116,8 @@
                          }                                     \
                      } while(0)
 
+#define DEBOUNCE_TIME					(50u)
+
 /******************************************************************************
 * Global Variables
 *******************************************************************************/
@@ -146,6 +152,8 @@ void print_heap_usage(char *msg);
 #if GENERATE_UNIQUE_CLIENT_ID
 static cy_rslt_t mqtt_get_unique_client_identifier(char *mqtt_client_identifier);
 #endif /* GENERATE_UNIQUE_CLIENT_ID */
+
+static bool button_was_pressed();
 
 /******************************************************************************
  * Function Name: mqtt_client_task
@@ -233,6 +241,11 @@ void mqtt_client_task(void *pvParameters)
 
     while (true)
     {
+		/* Check for button press and toggle LED */
+		if (button_was_pressed()){
+			   cyhal_gpio_toggle(CYBSP_USER_LED);
+		}
+
         /* Wait for results of MQTT operations from other tasks and callbacks. */
         if (pdTRUE == xQueueReceive(mqtt_task_q, &mqtt_status, portMAX_DELAY))
         {
@@ -605,6 +618,60 @@ static void mqtt_event_callback(cy_mqtt_t mqtt_handle, cy_mqtt_event_t event, vo
             break;
         }
     }
+}
+
+
+/******************************************************************************
+ * Function Name: button_was_pressed
+ ******************************************************************************
+ * Summary:
+ *  Function that debounces the push botton and detects press event.
+ *
+ * Return:
+ *  bool : true on new button press detected (i.e. falling edge) 
+ *         false on no new press event
+ *
+ ******************************************************************************/
+static bool button_was_pressed(){
+	/* Debouncing algorithm */
+	/* Wait for cooldown after last change */
+	
+	/* Initialise last state - tracks last polled value - true for pressed */
+	static bool last_state = false;
+	
+	/* Initialise last stable state */
+	static bool last_stable_state = false;
+
+	/* Initialise last time there was a falling or rising edge */
+	static TickType_t last_change_time = 0;
+
+	/* Get current value (inverting logic - true for pressed) and time*/
+	bool current_state = (cyhal_gpio_read(CYBSP_USER_BTN) == 0);
+	TickType_t current_time = xTaskGetTickCount();	
+
+	/* Check if edge */
+	if (current_state != last_state){
+		/* Set the last change time and update state*/
+		last_change_time = current_time;
+		last_state = current_state;
+		
+		/* Value just changed, wait for debounce, return false */
+		return false;
+	} 
+		
+	/* Check if value has been stable for long enough */
+	if ((current_time - last_change_time) > pdMS_TO_TICKS(DEBOUNCE_TIME)){
+		/* Check if the value is different from the last stable state */
+		if (current_state != last_stable_state){
+			/* Update the last stable state */
+			last_stable_state = current_state;
+			
+			/* Since stable state has changed return the new stable state */
+			return current_state;
+		}
+	}
+	/* Not stable for long enough, return false */
+	return false;
 }
 
 #if GENERATE_UNIQUE_CLIENT_ID
